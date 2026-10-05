@@ -1,0 +1,11 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+settings.json
+servers.json
+status.json
+data_location.txt
+logs/
+*.broken
