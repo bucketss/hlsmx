@@ -26,7 +26,7 @@ namespace hlsmx
             labelCrashLimit.Text = Lang.T("opt.loop_count");
             labelShutdown.Text = Lang.T("opt.shutdown");
             checkTray.Text = Lang.T("opt.tray");
-            checkBoxLocalIps.Text = Lang.T("opt.local_ips");
+            checkBoxMinimized.Text = Lang.T("opt.start_minimized");
             buttonImport.Text = Lang.T("opt.import");
             labelLanguage.Text = Lang.T("opt.language");
             labelLanguage.AutoSize = true;
@@ -82,7 +82,7 @@ namespace hlsmx
             comboLanguage.Left = field;
             comboLanguage.Top = labelLanguage.Top - (labelIcon.Top - comboIcon.Top);
             iconPreview.Left = comboIcon.Right + 12;
-            checkBoxLocalIps.Left = checkTray.Right + 16;
+            checkBoxMinimized.Left = checkTray.Right + 16;
             buttonImport.Width = Math.Max(60, TextRenderer.MeasureText(buttonImport.Text, buttonImport.Font).Width + 16);
             Label[] row_labels = { labelInterval, labelProcessRetries, labelNetworkRetries, labelMaxRestarts, labelCrashLimit, labelShutdown };
             NumericUpDown[] row_numbers = { numInterval, numProcessRetries, numNetworkRetries, numMaxRestarts, numCrashLimit, numShutdown };
@@ -90,7 +90,7 @@ namespace hlsmx
             int margin = page - numInterval.Right;
             int shift = Math.Max(0, row_labels.Max(l => l.Left + l.PreferredWidth) + 8 - numInterval.Left);
             foreach (NumericUpDown number in row_numbers) { number.Left += shift; }
-            int min_left = checkBoxLocalIps.Left + checkBoxLocalIps.PreferredSize.Width + 8;
+            int min_left = checkBoxMinimized.Left + checkBoxMinimized.PreferredSize.Width + 8;
             int overflow = Math.Max(numInterval.Right + margin - page, min_left + buttonImport.Width + 8 - page);
             if (overflow > 0)
             {
@@ -104,6 +104,7 @@ namespace hlsmx
             buttonImport.Top = checkTray.Top + (checkTray.Height - buttonImport.Height) / 2;
             checkBoxBots.Location = new Point(labelTheme.Left + 2, comboLanguage.Bottom + 20);
             checkBoxHltv.Location = new Point(labelTheme.Left + 2, checkBoxBots.Bottom + 6);
+            checkBoxLocalIps.Location = new Point(labelTheme.Left + 2, checkBoxHltv.Bottom + 6);
         }
 
         private List<WebhookSetting> hooks = new List<WebhookSetting>();
@@ -128,6 +129,7 @@ namespace hlsmx
 
         private readonly CheckBox checkBoxBots = new CheckBox();
         private readonly CheckBox checkBoxHltv = new CheckBox();
+        private readonly CheckBox checkBoxLocalIps = new CheckBox();
         private readonly CheckBox checkBoxWait = new CheckBox();
         private readonly LockableCheckBox checkBoxWarn = new LockableCheckBox();
         private readonly LockableCheckBox checkBoxSkip = new LockableCheckBox();
@@ -186,7 +188,9 @@ namespace hlsmx
             checkBoxBots.AutoSize = true;
             checkBoxHltv.Text = Lang.T("opt.exclude_hltv");
             checkBoxHltv.AutoSize = true;
-            tabAppearance.Controls.AddRange(new Control[] { checkBoxBots, checkBoxHltv });
+            checkBoxLocalIps.Text = Lang.T("opt.local_ips");
+            checkBoxLocalIps.AutoSize = true;
+            tabAppearance.Controls.AddRange(new Control[] { checkBoxBots, checkBoxHltv, checkBoxLocalIps });
 
             TabPage page = new TabPage(Lang.T("opt.tab_scheduling"));
             checkBoxWait.Text = Lang.T("opt.wait_empty");
@@ -316,6 +320,7 @@ namespace hlsmx
             refresh_scheduling();
             checkTray.Checked = Core.Instance.opt_tray;
             checkBoxLocalIps.Checked = Core.Instance.opt_list_local_ips;
+            checkBoxMinimized.Checked = Core.Instance.opt_start_minimized;
             hooks = Core.Instance.opt_webhooks;
             refresh_hooks(-1);
 
@@ -409,6 +414,7 @@ namespace hlsmx
             Core.Instance.opt_skip_busy = checkBoxSkip.Checked;
             Core.Instance.opt_tray = checkTray.Checked;
             Core.Instance.opt_list_local_ips = checkBoxLocalIps.Checked;
+            Core.Instance.opt_start_minimized = checkBoxMinimized.Checked;
             Core.Instance.opt_webhooks = hooks;
             Core.Instance.opt_theme = Theme.Modes[Math.Max(0, comboTheme.SelectedIndex)];
             Core.Instance.opt_icon = comboIcon.SelectedIndex > 0 ? comboIcon.Text : "";

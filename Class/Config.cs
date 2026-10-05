@@ -31,6 +31,7 @@ namespace hlsmx
             WaitForEmpty = false;
             WarnRcon = false;
             SkipBusy = false;
+            StartMinimized = false;
         }
 
         [DataMember(Order = 0)] public int CheckInterval;
@@ -54,6 +55,7 @@ namespace hlsmx
         [DataMember(Order = 21)] public bool WaitForEmpty;
         [DataMember(Order = 22)] public bool WarnRcon;
         [DataMember(Order = 23)] public bool SkipBusy;
+        [DataMember(Order = 24)] public bool StartMinimized;
     }
 
     [DataContract]

@@ -204,6 +204,7 @@ namespace hlsmx
             { "opt.scheduling_hint", "A server is empty after 5 minutes without any players." },
             { "opt.tray", "Close to tray" },
             { "opt.local_ips", "List local IPs" },
+            { "opt.start_minimized", "Start minimized" },
             { "opt.import", "Import..." },
             { "opt.theme", "Theme:" },
             { "opt.icon", "Icon:" },

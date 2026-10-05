@@ -136,6 +136,7 @@ namespace hlsmx
             setup_row_drag();
             Core.Instance.log_sink = log;
             string error = Core.Instance.ReadConfig();
+            if (Core.Instance.opt_start_minimized) { this.start_hidden = true; }
             apply_language();
             if (service_mode) { trayIcon.Visible = false; }
             ApplyIcon();
