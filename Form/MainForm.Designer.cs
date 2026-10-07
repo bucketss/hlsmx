@@ -98,7 +98,7 @@ private void InitializeComponent()
             this.menuOptions.Click += new System.EventHandler(this.menuOptions_Click);
             this.menuOpenLogs.Name = "menuOpenLogs";
             this.menuOpenLogs.Size = new System.Drawing.Size(200, 22);
-            this.menuOpenLogs.Text = "Open &logs";
+            this.menuOpenLogs.Text = "Open &Logs";
             this.menuOpenLogs.Click += new System.EventHandler(this.menuOpenLogs_Click);
             this.menuSeparator4.Name = "menuSeparator4";
             this.menuSeparator4.Size = new System.Drawing.Size(197, 6);

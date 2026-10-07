@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
@@ -31,6 +32,12 @@ namespace hlsmx
             logo_handle = LoadImage(Marshal.GetHINSTANCE(typeof(AboutForm).Module), (IntPtr)32512, 1, 48, 48, 0);
             logo_icon = logo_handle != IntPtr.Zero ? Icon.FromHandle(logo_handle) : Core.Instance.app_icon;
             logo.Paint += (s, e) => e.Graphics.DrawIcon(logo_icon, new Rectangle(0, 0, logo.Width, logo.Height));
+            logo.Cursor = Cursors.Hand;
+            logo.Click += (s, e) =>
+            {
+                try { Process.Start("https://github.com/bucketss/hlsmx/"); }
+                catch (Exception ex) { MessageBox.Show(this, ex.Message, Lang.T("dlg.error"), MessageBoxButtons.OK, MessageBoxIcon.Error); }
+            };
 
             Label text = new Label { Text = Lang.F("about.text", Program.version_with_date), AutoSize = true, Location = new Point(84, 22) };
             Button ok = new Button { Text = Lang.T("dlg.ok"), DialogResult = DialogResult.OK };

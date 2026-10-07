@@ -9,10 +9,10 @@ namespace hlsmx
         {
             { "app.title", "Half-Life Server Monitor X" },
             { "menu.settings", "HLS&MX" },
-            { "menu.new_server", "&Add server" },
-            { "menu.new_tab", "New &tab" },
+            { "menu.new_server", "&Add Server" },
+            { "menu.new_tab", "New &Tab" },
             { "menu.options", "&Options" },
-            { "menu.open_logs", "Open &logs" },
+            { "menu.open_logs", "Open &Logs" },
             { "menu.exit", "E&xit" },
             { "menu.help", "&Help" },
             { "menu.about", "&About..." },

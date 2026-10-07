@@ -297,9 +297,19 @@ namespace hlsmx
             catch (Exception e) { log(Lang.F("log.save_settings_failed", e.Message)); }
         }
 
-        private static string ip_display(string ip)
+        private static string ip_display(ServerState st)
         {
-            return NetQuery.Instance.is_local(ip) ? Lang.T("ip.local") : ip;
+            return explicit_ip(st.Params) == null && NetQuery.Instance.is_local(st.IP) ? Lang.T("ip.local") : st.IP;
+        }
+        private static string explicit_ip(string launch)
+        {
+            string found = null;
+            string[] split_param = (launch ?? "").Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < split_param.Length - 1; i++)
+            {
+                if (split_param[i] == "-ip" || split_param[i] == "+ip") { found = split_param[i + 1] == "0.0.0.0" ? null : split_param[i + 1]; }
+            }
+            return found;
         }
         private static string status_text(string status, int count, int max)
         {
@@ -355,7 +365,7 @@ namespace hlsmx
         private static void show(ListViewItem item)
         {
             ServerState st = state_of(item);
-            set_text(item, COL_IP, ip_display(st.IP));
+            set_text(item, COL_IP, ip_display(st));
             set_text(item, COL_PORT, st.Port);
             set_text(item, COL_EXE, st.Exe);
             set_text(item, COL_PRIORITY, Lang.priority(st.Priority));
