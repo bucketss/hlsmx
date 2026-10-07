@@ -62,9 +62,49 @@ namespace hlsmx
             tabGeneral.Controls.Add(comboBoxData);
             comboBoxData.Width = comboBoxData.Items.Cast<object>().Max(i => TextRenderer.MeasureText(i.ToString(), comboBoxData.Font).Width) + SystemInformation.VerticalScrollBarWidth + 12;
             comboBoxData.Location = new Point(checkTray.Left, (numShutdown.Bottom + checkTray.Top - comboBoxData.Height) / 2);
+            build_bar_row();
             Theme.Apply(this);
             fit_layout();
             fit_hook_buttons();
+        }
+
+        private readonly Label labelBar = new Label();
+        private readonly Panel swatchBar = new Panel();
+        private readonly Button buttonBarDefault = new Button();
+        private string bar_color = "";
+
+        private void build_bar_row()
+        {
+            labelBar.Text = Lang.T("opt.tab_bar");
+            labelBar.AutoSize = true;
+            swatchBar.Size = new Size(40, 20);
+            swatchBar.BorderStyle = BorderStyle.FixedSingle;
+            swatchBar.Cursor = Cursors.Hand;
+            swatchBar.Click += (s, e) => pick_bar_color();
+            buttonBarDefault.Text = Lang.T("opt.color_default");
+            buttonBarDefault.Height = 23;
+            buttonBarDefault.Width = Math.Max(60, TextRenderer.MeasureText(buttonBarDefault.Text, buttonBarDefault.Font).Width + 16);
+            buttonBarDefault.Click += (s, e) => { bar_color = ""; refresh_bar(); };
+            tabAppearance.Controls.AddRange(new Control[] { labelBar, swatchBar, buttonBarDefault });
+        }
+
+        private void pick_bar_color()
+        {
+            Color initial;
+            if (!ColorWheelForm.try_parse(bar_color, out initial)) { initial = Theme.Highlight; }
+            using (ColorWheelForm form = new ColorWheelForm(initial))
+            {
+                if (form.ShowDialog(this) != DialogResult.OK) { return; }
+                bar_color = ColorWheelForm.to_hex(form.Selected);
+            }
+            refresh_bar();
+        }
+
+        private void refresh_bar()
+        {
+            Color color;
+            swatchBar.BackColor = ColorWheelForm.try_parse(bar_color, out color) ? color : Theme.Highlight;
+            buttonBarDefault.Enabled = bar_color.Length > 0;
         }
 
         public bool service_installed = false;
@@ -76,11 +116,13 @@ namespace hlsmx
 
         private void fit_layout()
         {
-            int field = Math.Max(comboTheme.Left, Math.Max(labelTheme.PreferredWidth, Math.Max(labelIcon.PreferredWidth, labelLanguage.PreferredWidth)) + labelTheme.Left + 8);
+            int field = Math.Max(comboTheme.Left, Math.Max(Math.Max(labelTheme.PreferredWidth, labelBar.PreferredWidth), Math.Max(labelIcon.PreferredWidth, labelLanguage.PreferredWidth)) + labelTheme.Left + 8);
             comboTheme.Left = field;
             comboIcon.Left = field;
             comboLanguage.Left = field;
             comboLanguage.Top = labelLanguage.Top - (labelIcon.Top - comboIcon.Top);
+            comboIcon.Width = Math.Min(comboIcon.Width, tabAppearance.ClientSize.Width - field - iconPreview.Width - 20);
+            comboLanguage.Width = comboIcon.Width;
             iconPreview.Left = comboIcon.Right + 12;
             checkBoxMinimized.Left = checkTray.Right + 16;
             buttonImport.Width = Math.Max(60, TextRenderer.MeasureText(buttonImport.Text, buttonImport.Font).Width + 16);
@@ -102,9 +144,22 @@ namespace hlsmx
             }
             buttonImport.Left = page + Math.Max(0, overflow) - 8 - buttonImport.Width;
             buttonImport.Top = checkTray.Top + (checkTray.Height - buttonImport.Height) / 2;
-            checkBoxBots.Location = new Point(labelTheme.Left + 2, comboLanguage.Bottom + 20);
+            swatchBar.Location = new Point(field, comboLanguage.Bottom + 12);
+            labelBar.Location = new Point(labelTheme.Left, swatchBar.Top + (swatchBar.Height - labelBar.PreferredHeight) / 2);
+            buttonBarDefault.Location = new Point(swatchBar.Right + 8, swatchBar.Top + (swatchBar.Height - buttonBarDefault.Height) / 2);
+            checkBoxBots.Location = new Point(labelTheme.Left + 2, swatchBar.Bottom + 14);
             checkBoxHltv.Location = new Point(labelTheme.Left + 2, checkBoxBots.Bottom + 6);
-            checkBoxLocalIps.Location = new Point(labelTheme.Left + 2, checkBoxHltv.Bottom + 6);
+            checkBoxHideInactive.Location = new Point(labelTheme.Left + 2, checkBoxHltv.Bottom + 6);
+            checkBoxHideLog.Location = new Point(labelTheme.Left + 2, checkBoxHideInactive.Bottom + 6);
+            int grow = checkBoxHideLog.Bottom + 8 - tabAppearance.ClientSize.Height;
+            if (grow > 0)
+            {
+                this.Height += grow;
+                tabs.Height += grow;
+                buttonSave.Top += grow;
+                buttonApply.Top += grow;
+                buttonCancel.Top += grow;
+            }
         }
 
         private List<WebhookSetting> hooks = new List<WebhookSetting>();
@@ -129,7 +184,8 @@ namespace hlsmx
 
         private readonly CheckBox checkBoxBots = new CheckBox();
         private readonly CheckBox checkBoxHltv = new CheckBox();
-        private readonly CheckBox checkBoxLocalIps = new CheckBox();
+        private readonly CheckBox checkBoxHideInactive = new CheckBox();
+        private readonly CheckBox checkBoxHideLog = new CheckBox();
         private readonly CheckBox checkBoxWait = new CheckBox();
         private readonly LockableCheckBox checkBoxWarn = new LockableCheckBox();
         private readonly LockableCheckBox checkBoxSkip = new LockableCheckBox();
@@ -188,9 +244,11 @@ namespace hlsmx
             checkBoxBots.AutoSize = true;
             checkBoxHltv.Text = Lang.T("opt.exclude_hltv");
             checkBoxHltv.AutoSize = true;
-            checkBoxLocalIps.Text = Lang.T("opt.local_ips");
-            checkBoxLocalIps.AutoSize = true;
-            tabAppearance.Controls.AddRange(new Control[] { checkBoxBots, checkBoxHltv, checkBoxLocalIps });
+            checkBoxHideInactive.Text = Lang.T("opt.hide_inactive");
+            checkBoxHideInactive.AutoSize = true;
+            checkBoxHideLog.Text = Lang.T("opt.hide_log");
+            checkBoxHideLog.AutoSize = true;
+            tabAppearance.Controls.AddRange(new Control[] { checkBoxBots, checkBoxHltv, checkBoxHideInactive, checkBoxHideLog });
 
             TabPage page = new TabPage(Lang.T("opt.tab_scheduling"));
             checkBoxWait.Text = Lang.T("opt.wait_empty");
@@ -319,7 +377,10 @@ namespace hlsmx
             checkBoxSkip.Checked = Core.Instance.opt_skip_busy;
             refresh_scheduling();
             checkTray.Checked = Core.Instance.opt_tray;
-            checkBoxLocalIps.Checked = Core.Instance.opt_list_local_ips;
+            checkBoxHideInactive.Checked = Core.Instance.opt_hide_inactive;
+            checkBoxHideLog.Checked = Core.Instance.opt_hide_log;
+            bar_color = Core.Instance.opt_tab_bar_color;
+            refresh_bar();
             checkBoxMinimized.Checked = Core.Instance.opt_start_minimized;
             hooks = Core.Instance.opt_webhooks;
             refresh_hooks(-1);
@@ -413,7 +474,9 @@ namespace hlsmx
             Core.Instance.opt_warn_rcon = checkBoxWarn.Checked;
             Core.Instance.opt_skip_busy = checkBoxSkip.Checked;
             Core.Instance.opt_tray = checkTray.Checked;
-            Core.Instance.opt_list_local_ips = checkBoxLocalIps.Checked;
+            Core.Instance.opt_hide_inactive = checkBoxHideInactive.Checked;
+            Core.Instance.opt_hide_log = checkBoxHideLog.Checked;
+            Core.Instance.opt_tab_bar_color = bar_color;
             Core.Instance.opt_start_minimized = checkBoxMinimized.Checked;
             Core.Instance.opt_webhooks = hooks;
             Core.Instance.opt_theme = Theme.Modes[Math.Max(0, comboTheme.SelectedIndex)];
@@ -440,6 +503,7 @@ namespace hlsmx
             if (applied != null) { applied(); }
             Theme.Apply(this);
             refresh_scheduling();
+            refresh_bar();
         }
 
     }

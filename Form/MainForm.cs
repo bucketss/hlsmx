@@ -38,6 +38,8 @@ namespace hlsmx
             public string Cores = "";
             public string Priority = "Normal";
             public bool Hidden;
+            public bool Disabled;
+            public string Tab = "";
             public int Restarts;
             public int Pid;
             public long StartTicks;
@@ -130,17 +132,21 @@ namespace hlsmx
             this.start_hidden = start_hidden || service_mode;
             this.service_mode = service_mode;
             InitializeComponent();
-            menuAddServer.ShortcutKeyDisplayString = "Ctrl+N";
             menuAddServer.Click += menuNewServer_Click;
             menuSettings.DropDownItems.Insert(0, menuAddServer);
+            menuAddTab.Click += (s, e) => add_tab();
+            menuSettings.DropDownItems.Insert(1, menuAddTab);
+            serverMenu.Items.Insert(serverMenu.Items.IndexOf(menuDisableServer) + 1, menuMoveToTab);
             setup_row_drag();
             Core.Instance.log_sink = log;
             string error = Core.Instance.ReadConfig();
+            setup_tabs();
             if (Core.Instance.opt_start_minimized) { this.start_hidden = true; }
             apply_language();
             if (service_mode) { trayIcon.Visible = false; }
             ApplyIcon();
             Theme.Apply(this);
+            theme_pages();
             apply_layout();
             serverList.ClientSizeChanged += (s, e) => fill_last_column();
             serverList.ColumnReordered += (s, e) => BeginInvoke((MethodInvoker)fill_last_column);
@@ -148,10 +154,11 @@ namespace hlsmx
             Core.Instance.notify(Core.NOTIFY_START, Lang.F(service_mode ? "notify.started_service" : "notify.started", Environment.MachineName));
             if (error != null) { log(error); }
             load_servers();
+            sync_tabs();
             checkTimer.Interval = Core.Instance.opt_check_interval * 1000;
             checkTimer.Enabled = true;
             pending_timer.Interval = 1000;
-            pending_timer.Tick += (s, e) => { foreach (ListViewItem item in serverList.Items.Cast<ListViewItem>().ToList()) { run_pending(item); } };
+            pending_timer.Tick += (s, e) => { foreach (ListViewItem item in enabled_items()) { run_pending(item); } };
             pending_timer.Enabled = true;
         }
         protected override void SetVisibleCore(bool value)
@@ -290,7 +297,7 @@ namespace hlsmx
 
         private static string ip_display(string ip)
         {
-            return !Core.Instance.opt_list_local_ips && NetQuery.Instance.is_local(ip) ? Lang.T("ip.local") : ip;
+            return NetQuery.Instance.is_local(ip) ? Lang.T("ip.local") : ip;
         }
         private static string status_text(string status, int count, int max)
         {
@@ -376,16 +383,19 @@ namespace hlsmx
             this.Text = Lang.T("app.title");
             menuSettings.Text = Lang.T("menu.settings");
             menuAddServer.Text = Lang.T("menu.new_server");
+            menuAddTab.Text = Lang.T("menu.new_tab");
             menuOptions.Text = Lang.T("menu.options");
             menuOpenLogs.Text = Lang.T("menu.open_logs");
             menuExit.Text = Lang.T("menu.exit");
             menuHelp.Text = Lang.T("menu.help");
             menuAbout.Text = Lang.T("menu.about");
             tabServers.Text = Lang.T("tab.servers");
+            tabDisabled.Text = Lang.T("tab.inactive");
             tabLog.Text = Lang.T("tab.log");
             for (int i = 0; i < serverList.Columns.Count && i < column_keys.Length; i++) { serverList.Columns[i].Text = Lang.T(column_keys[i]); }
             set_pause_menu(menu_resumes);
             menuResetRestartCount.Text = Lang.T("ctx.zero");
+            menuMoveToTab.Text = Lang.T("ctx.move_to_tab");
             menuEditServer.Text = Lang.T("ctx.edit");
             menuSchedules.Text = Lang.T("ctx.schedules");
             menuNewServer.Text = Lang.T("ctx.new");
@@ -401,7 +411,7 @@ namespace hlsmx
             menuTrayExit.Text = Lang.T("menu.exit");
             build_color_menu();
             serverList.BeginUpdate();
-            foreach (ListViewItem item in serverList.Items) { show(item); }
+            foreach (ListViewItem item in all_items()) { show(item); }
             serverList.EndUpdate();
         }
 
@@ -437,6 +447,8 @@ namespace hlsmx
             s.Pid = st.Pid;
             s.StartTicks = st.StartTicks;
             s.Window = st.Window;
+            s.Disabled = st.Disabled;
+            s.Tab = st.Tab;
             return s;
         }
         private ListViewItem add_item(ServerEntry s, int index)
@@ -459,16 +471,362 @@ namespace hlsmx
             st.Pid = s.Pid;
             st.StartTicks = s.StartTicks;
             st.Window = s.Window;
+            st.Disabled = s.Disabled;
+            st.Tab = s.Tab ?? "";
+            if (st.Disabled) { s.Paused = true; clear_process(st); }
             set_proc(st, s.Paused ? PROC_PAUSED : "");
             set_net(st, s.Paused ? NET_PAUSED : "");
             apply_row_color(item);
             show(item);
-            if (index < 0 || index >= serverList.Items.Count) { serverList.Items.Add(item); } else { serverList.Items.Insert(index, item); }
+            if (tab_of(item) != current_tab)
+            {
+                if (index < 0 || index >= hidden_items.Count) { hidden_items.Add(item); } else { hidden_items.Insert(index, item); }
+            }
+            else if (index < 0 || index >= serverList.Items.Count) { serverList.Items.Add(item); } else { serverList.Items.Insert(index, item); }
             return item;
+        }
+
+        private const string TAB_SERVERS = "servers";
+        private const string TAB_INACTIVE = "inactive";
+        private const string TAB_LOG = "log";
+        private string current_tab = TAB_SERVERS;
+        private List<ListViewItem> hidden_items = new List<ListViewItem>();
+        private readonly Dictionary<string, TabPage> tab_pages = new Dictionary<string, TabPage>();
+        private readonly ContextMenuStrip tabMenu = new ContextMenuStrip();
+        private readonly ToolStripMenuItem menuMoveToTab = new ToolStripMenuItem();
+        private bool syncing_tabs;
+
+        private static bool builtin_tab(string id)
+        {
+            return id == TAB_SERVERS || id == TAB_INACTIVE || id == TAB_LOG;
+        }
+        private static bool server_tab(string id)
+        {
+            return id != null && id != TAB_LOG;
+        }
+        private List<TabSetting> tab_settings { get { return Core.Instance.layout.Tabs; } }
+        private TabSetting tab_setting(string id)
+        {
+            return tab_settings.FirstOrDefault(t => t.Id == id);
+        }
+        private string tab_id(TabPage page)
+        {
+            foreach (KeyValuePair<string, TabPage> pair in tab_pages) { if (pair.Value == page) { return pair.Key; } }
+            return null;
+        }
+        private string tab_of(ListViewItem item)
+        {
+            ServerState st = state_of(item);
+            if (st.Disabled) { return TAB_INACTIVE; }
+            return st.Tab.Length > 0 && !builtin_tab(st.Tab) && tab_pages.ContainsKey(st.Tab) ? st.Tab : TAB_SERVERS;
+        }
+
+        private IEnumerable<ListViewItem> items_of(string id)
+        {
+            return id == current_tab ? serverList.Items.Cast<ListViewItem>() : hidden_items.Where(i => tab_of(i) == id);
+        }
+        private List<ListViewItem> enabled_items()
+        {
+            return all_items().Where(i => !state_of(i).Disabled).ToList();
+        }
+        private List<ListViewItem> all_items()
+        {
+            return tab_settings.Where(t => server_tab(t.Id)).SelectMany(t => items_of(t.Id)).ToList();
+        }
+        private bool alive(ListViewItem item)
+        {
+            return item.ListView != null || hidden_items.Contains(item);
+        }
+
+        private void setup_tabs()
+        {
+            Settings layout = Core.Instance.layout;
+            List<TabSetting> list = (layout.Tabs ?? new List<TabSetting>()).Where(t => t != null && !string.IsNullOrEmpty(t.Id)).GroupBy(t => t.Id).Select(g => g.First()).ToList();
+            foreach (TabSetting t in list)
+            {
+                if (t.Name == null) { t.Name = ""; }
+                if (t.Color == null) { t.Color = ""; }
+            }
+            string[] builtins = { TAB_SERVERS, TAB_INACTIVE, TAB_LOG };
+            for (int i = 0; i < builtins.Length; i++)
+            {
+                if (list.Any(t => t.Id == builtins[i])) { continue; }
+                TabSetting missing = new TabSetting();
+                missing.Id = builtins[i];
+                list.Insert(builtins[i] == TAB_LOG ? list.Count : Math.Min(i, list.Count), missing);
+            }
+            layout.Tabs = list;
+            tab_pages[TAB_SERVERS] = tabServers;
+            tab_pages[TAB_INACTIVE] = tabDisabled;
+            tab_pages[TAB_LOG] = tabLog;
+            foreach (TabSetting t in list.Where(t => !builtin_tab(t.Id))) { tab_pages[t.Id] = new_page(t.Name); }
+            tabs.TabColor = page =>
+            {
+                TabSetting t = tab_setting(tab_id(page));
+                Color color;
+                return t != null && ColorWheelForm.try_parse(t.Color, out color) ? color : Color.Empty;
+            };
+            tabs.Reordered += (s, e) => tabs_reordered();
+            tabs.MouseUp += tabs_MouseUp;
+            tabs.AllowDrop = true;
+            tabs.DragEnter += tabs_DragOver;
+            tabs.DragOver += tabs_DragOver;
+            tabs.DragDrop += tabs_DragDrop;
+            sync_tabs();
+            tabs.SelectedTab = tabServers;
+        }
+        private TabPage new_page(string name)
+        {
+            TabPage page = new TabPage(name);
+            page.Padding = new Padding(3);
+            page.UseVisualStyleBackColor = true;
+            Theme.ApplyTo(page);
+            return page;
+        }
+        private void theme_pages()
+        {
+            foreach (TabPage page in tab_pages.Values) { Theme.ApplyTo(page); }
+            Color bar;
+            tabs.BarColor = ColorWheelForm.try_parse(Core.Instance.opt_tab_bar_color, out bar) ? bar : Color.Empty;
+            tabs.Invalidate();
+        }
+        private void save_tabs()
+        {
+            try { Core.Instance.SaveConfig(); }
+            catch (Exception e) { log(Lang.F("log.save_settings_failed", e.Message)); }
+        }
+        private bool tab_visible(string id)
+        {
+            if (id == TAB_LOG) { return !Core.Instance.opt_hide_log; }
+            if (id == TAB_INACTIVE) { return !Core.Instance.opt_hide_inactive || items_of(TAB_INACTIVE).Any(); }
+            return true;
+        }
+        private void sync_tabs()
+        {
+            List<TabPage> wanted = tab_settings.Where(t => tab_visible(t.Id)).Select(t => tab_pages[t.Id]).ToList();
+            if (wanted.SequenceEqual(tabs.TabPages.Cast<TabPage>())) { return; }
+            TabPage selected = tabs.SelectedTab;
+            syncing_tabs = true;
+            try
+            {
+                tabs.SuspendLayout();
+                tabs.TabPages.Clear();
+                tabs.TabPages.AddRange(wanted.ToArray());
+                tabs.SelectedTab = wanted.Contains(selected) ? selected : tabServers;
+                tabs.ResumeLayout();
+            }
+            finally { syncing_tabs = false; }
+            tab_selected();
+        }
+        private void tab_selected()
+        {
+            string id = tab_id(tabs.SelectedTab);
+            if (server_tab(id)) { show_tab(id); }
+        }
+        private void tabs_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (syncing_tabs || tabs.Moving) { return; }
+            tab_selected();
+        }
+        private void tabs_reordered()
+        {
+            List<string> visible = tabs.TabPages.Cast<TabPage>().Select(tab_id).Where(id => id != null).ToList();
+            int next = 0;
+            Core.Instance.layout.Tabs = tab_settings.Select(t => visible.Contains(t.Id) ? tab_setting(visible[next++]) : t).ToList();
+            save_tabs();
+        }
+        private void show_tab(string id)
+        {
+            if (id == current_tab) { return; }
+            serverList.BeginUpdate();
+            hidden_items.AddRange(serverList.Items.Cast<ListViewItem>());
+            serverList.Items.Clear();
+            current_tab = id;
+            List<ListViewItem> shown = hidden_items.Where(i => tab_of(i) == id).ToList();
+            hidden_items.RemoveAll(shown.Contains);
+            serverList.Items.AddRange(shown.ToArray());
+            serverList.Parent = tab_pages[id];
+            serverList.EndUpdate();
+            sort_column = -1;
+            fill_last_column();
+        }
+        private void relocate(ListViewItem item)
+        {
+            bool shown = tab_of(item) == current_tab;
+            if (shown == (item.ListView != null)) { return; }
+            item.Selected = false;
+            if (shown)
+            {
+                hidden_items.Remove(item);
+                serverList.Items.Add(item);
+            }
+            else
+            {
+                item.Remove();
+                hidden_items.Add(item);
+            }
+        }
+
+        private void add_tab()
+        {
+            TabSetting t = new TabSetting();
+            t.Id = "tab" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            t.Name = Lang.T("tab.new_name");
+            tab_settings.Add(t);
+            tab_pages[t.Id] = new_page(t.Name);
+            sync_tabs();
+            tabs.SelectedTab = tab_pages[t.Id];
+            save_tabs();
+            rename_tab(t.Id);
+        }
+        private void rename_tab(string id)
+        {
+            TabSetting t = tab_setting(id);
+            if (t == null) { return; }
+            string name = prompt(Lang.T("tab.rename_title"), t.Name);
+            if (string.IsNullOrWhiteSpace(name)) { return; }
+            t.Name = name.Trim();
+            tab_pages[id].Text = t.Name;
+            tabs.Invalidate();
+            save_tabs();
+        }
+        private void delete_tab(string id)
+        {
+            TabSetting t = tab_setting(id);
+            if (t == null || builtin_tab(id)) { return; }
+            if (MessageBox.Show(this, Lang.F("msg.delete_tab", t.Name), Lang.T("dlg.confirm"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) { return; }
+            if (current_tab == id) { tabs.SelectedTab = tabServers; }
+            List<ListViewItem> moved = all_items().Where(i => state_of(i).Tab == id).ToList();
+            tab_settings.Remove(t);
+            TabPage page = tab_pages[id];
+            tab_pages.Remove(id);
+            foreach (ListViewItem item in moved)
+            {
+                state_of(item).Tab = "";
+                relocate(item);
+            }
+            sync_tabs();
+            page.Dispose();
+            save_tabs();
+            save_servers();
+        }
+        private void set_tab_color(string id, string value)
+        {
+            TabSetting t = tab_setting(id);
+            if (t == null) { return; }
+            t.Color = value;
+            tabs.Invalidate();
+            save_tabs();
+        }
+        private void tabs_MouseUp(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Right) { return; }
+            int index = tabs.TabAt(e.Location);
+            string id = index >= 0 ? tab_id(tabs.TabPages[index]) : null;
+            bool custom = id != null && !builtin_tab(id);
+            tabMenu.Items.Clear();
+            ToolStripMenuItem rename = new ToolStripMenuItem(Lang.T("tabmenu.rename"), null, (s, a) => rename_tab(id));
+            rename.Enabled = custom;
+            ToolStripMenuItem delete = new ToolStripMenuItem(Lang.T("tabmenu.delete"), null, (s, a) => delete_tab(id));
+            delete.Enabled = custom;
+            tabMenu.Items.Add(rename);
+            ToolStripMenuItem color = color_menu_for(() => tab_setting(id).Color, v => set_tab_color(id, v));
+            color.Enabled = id != null;
+            tabMenu.Items.Add(color);
+            tabMenu.Items.Add(new ToolStripSeparator());
+            tabMenu.Items.Add(new ToolStripMenuItem(Lang.T("tabmenu.new"), null, (s, a) => add_tab()));
+            tabMenu.Items.Add(delete);
+            tabMenu.Show(tabs, e.Location);
+        }
+        private string prompt(string title, string text)
+        {
+            using (Form form = new Form())
+            {
+                form.Text = title;
+                form.FormBorderStyle = FormBorderStyle.FixedDialog;
+                form.StartPosition = FormStartPosition.CenterParent;
+                form.MaximizeBox = false;
+                form.MinimizeBox = false;
+                form.ShowInTaskbar = false;
+                form.ClientSize = new Size(260, 76);
+                form.Icon = Core.Instance.app_icon;
+                TextBox box = new TextBox { Text = text, Location = new Point(12, 12), Size = new Size(236, 23) };
+                Button ok = new Button { Text = Lang.T("dlg.ok"), DialogResult = DialogResult.OK, Location = new Point(92, 42), Size = new Size(75, 26) };
+                Button cancel = new Button { Text = Lang.T("dlg.cancel"), DialogResult = DialogResult.Cancel, Location = new Point(173, 42), Size = new Size(75, 26) };
+                form.AcceptButton = ok;
+                form.CancelButton = cancel;
+                form.Controls.AddRange(new Control[] { box, ok, cancel });
+                Theme.Apply(form);
+                box.SelectAll();
+                return form.ShowDialog(this) == DialogResult.OK ? box.Text : null;
+            }
+        }
+
+        private static bool can_disable(ListViewItem item)
+        {
+            return is_paused(item) && state_of(item).Pid == 0;
+        }
+        private void set_disabled(ListViewItem item, bool disabled)
+        {
+            ServerState st = state_of(item);
+            if (st.Disabled == disabled) { return; }
+            st.Disabled = disabled;
+            if (disabled)
+            {
+                unqueue(item);
+                st.Queue.Clear();
+            }
+            relocate(item);
+        }
+        private void move_to_tab(ListViewItem item, string id)
+        {
+            if (id == TAB_INACTIVE)
+            {
+                if (can_disable(item)) { set_disabled(item, true); }
+                return;
+            }
+            ServerState st = state_of(item);
+            st.Tab = id == TAB_SERVERS ? "" : id;
+            if (st.Disabled) { set_disabled(item, false); } else { relocate(item); }
+        }
+        private void move_items(List<ListViewItem> items, string id)
+        {
+            foreach (ListViewItem item in items) { move_to_tab(item, id); }
+            save_servers();
+            sync_tabs();
+        }
+        private void menuDisableServer_Click(object sender, EventArgs e)
+        {
+            bool disable = current_tab != TAB_INACTIVE;
+            foreach (ListViewItem item in serverList.SelectedItems.Cast<ListViewItem>().ToList())
+            {
+                if (disable && !can_disable(item)) { continue; }
+                set_disabled(item, disable);
+            }
+            save_servers();
+            sync_tabs();
+        }
+        private string drop_tab(DragEventArgs e)
+        {
+            if (drag_items == null) { return null; }
+            int index = tabs.TabAt(tabs.PointToClient(new Point(e.X, e.Y)));
+            string id = index >= 0 ? tab_id(tabs.TabPages[index]) : null;
+            if (!server_tab(id) || id == current_tab) { return null; }
+            if (id == TAB_INACTIVE && !drag_items.All(can_disable)) { return null; }
+            return id;
+        }
+        private void tabs_DragOver(object sender, DragEventArgs e)
+        {
+            e.Effect = drop_tab(e) != null ? DragDropEffects.Move : DragDropEffects.None;
+        }
+        private void tabs_DragDrop(object sender, DragEventArgs e)
+        {
+            string id = drop_tab(e);
+            if (id != null) { move_items(drag_items.ToList(), id); }
         }
         public void save_servers()
         {
-            List<ServerEntry> servers = serverList.Items.Cast<ListViewItem>().Select(entry_of).ToList();
+            List<ServerEntry> servers = all_items().Select(entry_of).ToList();
             try { Core.Instance.SaveConfig_Servers(servers); }
             catch (Exception e) { log(Lang.F("log.save_servers_failed", e.Message)); }
         }
@@ -533,6 +891,8 @@ namespace hlsmx
             apply_language();
             ApplyIcon();
             Theme.Apply(this);
+            theme_pages();
+            sync_tabs();
         }
         private void import_configs(IWin32Window owner)
         {
@@ -595,12 +955,14 @@ namespace hlsmx
 
         private int add_imported(List<ServerEntry> servers)
         {
-            HashSet<string> existing = new HashSet<string>(serverList.Items.Cast<ListViewItem>().Select(i => server_key(state_of(i).Exe, state_of(i).Port)));
+            HashSet<string> existing = new HashSet<string>(all_items().Select(i => server_key(state_of(i).Exe, state_of(i).Port)));
             int added = 0;
             foreach (ServerEntry s in servers)
             {
                 if (!existing.Add(server_key(s.Executable, s.Port))) { continue; }
                 s.Paused = true;
+                s.Disabled = false;
+                s.Tab = "";
                 add_item(s, -1);
                 added++;
             }
@@ -770,6 +1132,7 @@ namespace hlsmx
                 if (start)
                 {
                     if (!is_paused(lvi) || !confirm_port_free(lvi)) { continue; }
+                    set_disabled(lvi, false);
                     set_item_state(lvi, true);
                     if (state_of(lvi).Pid == 0) { restart_item(lvi, 0); }
                 }
@@ -777,6 +1140,7 @@ namespace hlsmx
                 show(lvi);
             }
             save_servers();
+            sync_tabs();
         }
 
         private static bool binds_all(string ip)
@@ -793,7 +1157,7 @@ namespace hlsmx
             string port = st.Port.Trim();
             int port_number;
             if (!Int32.TryParse(port, out port_number)) { return false; }
-            foreach (ListViewItem candidate in serverList.Items)
+            foreach (ListViewItem candidate in all_items())
             {
                 ServerState cs = state_of(candidate);
                 if (candidate == item || cs.Port.Trim() != port) { continue; }
@@ -840,8 +1204,19 @@ namespace hlsmx
             foreach (ToolStripItem entry in serverMenu.Items) { entry.Enabled = any; }
             menuNewServer.Enabled = true;
             set_pause_menu(any && first.Proc == PROC_PAUSED);
+            menuDisableServer.Text = Lang.T(current_tab == TAB_INACTIVE ? "ctx.reactivate" : "ctx.deactivate");
+            menuMoveToTab.DropDownItems.Clear();
+            foreach (TabSetting t in tab_settings.Where(t => server_tab(t.Id) && t.Id != current_tab))
+            {
+                string id = t.Id;
+                ToolStripMenuItem entry = new ToolStripMenuItem(tab_pages[id].Text.Replace("&", "&&"), null, (s, a) => move_items(serverList.SelectedItems.Cast<ListViewItem>().ToList(), id));
+                if (id == TAB_INACTIVE) { entry.Enabled = rows.All(r => can_disable(serverList.Items[r])); }
+                menuMoveToTab.DropDownItems.Add(entry);
+            }
+            menuMoveToTab.Enabled = any && menuMoveToTab.DropDownItems.Count > 0;
             if (any)
             {
+                menuDisableServer.Enabled = current_tab == TAB_INACTIVE || rows.All(r => can_disable(serverList.Items[r]));
                 menuResetRestartCount.Enabled = first.Proc != PROC_PAUSED;
                 menuEditServer.Enabled = single;
                 menuSchedules.Enabled = single;
@@ -865,7 +1240,6 @@ namespace hlsmx
             int selected = serverList.SelectedItems.Count;
             if (e.KeyCode == Keys.Delete && selected > 0) { menuDeleteServer_Click(sender, e); }
             else if ((e.KeyCode == Keys.Enter || e.KeyCode == Keys.F2) && selected == 1) { menuEditServer_Click(sender, e); }
-            else if (e.Control && e.KeyCode == Keys.N) { menuNewServer_Click(sender, e); }
             else if (e.Control && e.KeyCode == Keys.D && selected == 1) { menuDuplicateServer_Click(sender, e); }
             else if (e.Control && e.KeyCode == Keys.Up && selected > 0) { move_selected(-1); }
             else if (e.Control && e.KeyCode == Keys.Down && selected > 0) { move_selected(1); }
@@ -942,17 +1316,7 @@ namespace hlsmx
                 serverMenu.Items.Remove(color_menu);
                 color_menu.Dispose();
             }
-            ToolStripMenuItem menu = new ToolStripMenuItem(Lang.T("ctx.color"));
-            menu.DropDownItems.Add(new ToolStripMenuItem(Lang.T("color.none"), null, (s, e) => set_row_color("")));
-            foreach (string[] entry in row_colors)
-            {
-                string value = entry[1];
-                Color color;
-                ColorWheelForm.try_parse(value, out color);
-                menu.DropDownItems.Add(new ToolStripMenuItem(Lang.T(entry[0]), swatch(color), (s, e) => set_row_color(value)));
-            }
-            menu.DropDownItems.Add(new ToolStripSeparator());
-            menu.DropDownItems.Add(new ToolStripMenuItem(Lang.T("color.other"), null, (s, e) => pick_row_color()));
+            ToolStripMenuItem menu = color_menu_for(() => serverList.SelectedItems.Count > 0 ? state_of(serverList.SelectedItems[0]).Color : "", set_row_color);
             serverMenu.Items.Insert(serverMenu.Items.IndexOf(menuMoveDown) + 1, menu);
             color_menu = menu;
         }
@@ -968,15 +1332,28 @@ namespace hlsmx
             return bmp;
         }
 
-        private void pick_row_color()
+        private ToolStripMenuItem color_menu_for(Func<string> current, Action<string> set)
         {
-            if (serverList.SelectedItems.Count == 0) { return; }
-            Color initial;
-            ColorWheelForm.try_parse(state_of(serverList.SelectedItems[0]).Color, out initial);
-            using (ColorWheelForm form = new ColorWheelForm(initial))
+            ToolStripMenuItem menu = new ToolStripMenuItem(Lang.T("ctx.color"));
+            menu.DropDownItems.Add(new ToolStripMenuItem(Lang.T("color.none"), null, (s, e) => set("")));
+            foreach (string[] entry in row_colors)
             {
-                if (form.ShowDialog(this) == DialogResult.OK) { set_row_color(ColorWheelForm.to_hex(form.Selected)); }
+                string value = entry[1];
+                Color color;
+                ColorWheelForm.try_parse(value, out color);
+                menu.DropDownItems.Add(new ToolStripMenuItem(Lang.T(entry[0]), swatch(color), (s, e) => set(value)));
             }
+            menu.DropDownItems.Add(new ToolStripSeparator());
+            menu.DropDownItems.Add(new ToolStripMenuItem(Lang.T("color.other"), null, (s, e) =>
+            {
+                Color initial;
+                ColorWheelForm.try_parse(current(), out initial);
+                using (ColorWheelForm form = new ColorWheelForm(initial))
+                {
+                    if (form.ShowDialog(this) == DialogResult.OK) { set(ColorWheelForm.to_hex(form.Selected)); }
+                }
+            }));
+            return menu;
         }
 
         private void set_row_color(string value)
@@ -1130,11 +1507,14 @@ namespace hlsmx
             s.Params = form.LaunchParams;
             s.RconPassword = form.RconPassword;
             s.Paused = true;
+            s.Disabled = current_tab == TAB_INACTIVE;
+            s.Tab = builtin_tab(current_tab) ? "" : current_tab;
             s.IP = "127.0.0.1";
             return s;
         }
 
         private readonly ToolStripMenuItem menuAddServer = new ToolStripMenuItem();
+        private readonly ToolStripMenuItem menuAddTab = new ToolStripMenuItem();
 
         private void menuNewServer_Click(object sender, EventArgs e)
         {
@@ -1224,6 +1604,7 @@ namespace hlsmx
             if (MessageBox.Show(this, Lang.T("msg.delete"), Lang.T("dlg.confirm"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) { return; }
             foreach (ListViewItem lvi in serverList.SelectedItems.Cast<ListViewItem>().ToList()) { lvi.Remove(); }
             save_servers();
+            sync_tabs();
         }
 
         class Snapshot
@@ -1273,7 +1654,7 @@ namespace hlsmx
                 {
                     this.BeginInvoke((MethodInvoker)delegate
                     {
-                        if (item.ListView == null) { pump_restarts(); return; }
+                        if (!alive(item)) { pump_restarts(); return; }
                         st.Pid = started.Pid;
                         st.StartTicks = started.StartTicks;
                         st.Window = started.Window;
@@ -1315,8 +1696,10 @@ namespace hlsmx
             {
                 state_of(item).cancel_active();
                 if (!confirm_port_free(item)) { continue; }
+                set_disabled(item, false);
                 restart_item(item, Core.Instance.opt_shutdown);
             }
+            sync_tabs();
         }
 
         private void menuCloseServer_Click(object sender, EventArgs e)
@@ -1333,7 +1716,7 @@ namespace hlsmx
             if (target <= schedule_horizon) { return; }
             DateTime from = schedule_horizon;
             schedule_horizon = target;
-            foreach (ListViewItem item in serverList.Items)
+            foreach (ListViewItem item in enabled_items())
             {
                 ServerState st = state_of(item);
                 foreach (ScheduleEntry s in st.Schedules)
@@ -1488,7 +1871,7 @@ namespace hlsmx
         private void checkTimer_Tick(object sender, EventArgs e)
         {
             run_schedules();
-            List<ListViewItem> items = serverList.Items.Cast<ListViewItem>().ToList();
+            List<ListViewItem> items = enabled_items();
             bool changed = track_processes(items, Core.snapshot(items.Select(i => state_of(i).Exe)));
             List<ListViewItem> net_targets = new List<ListViewItem>();
             foreach (ListViewItem item in items)
@@ -1579,7 +1962,7 @@ namespace hlsmx
             {
                 ListViewItem item = job.Item;
                 ServerState st = state_of(item);
-                if (item.ListView == null || job.Result == null || st.Proc != PROC_NORMAL) { continue; }
+                if (!alive(item) || job.Result == null || st.Proc != PROC_NORMAL) { continue; }
                 if (job.Result.Ok)
                 {
                     set_net(st, NET_NORMAL);
@@ -1659,14 +2042,14 @@ namespace hlsmx
 
         private void pump_restarts()
         {
-            while (restart_queue.Count > 0 && serverList.Items.Cast<ListViewItem>().Count(i => starting(state_of(i))) < (Core.Instance.opt_max_restarts > 0 ? Core.Instance.opt_max_restarts : auto_restart_slots))
+            while (restart_queue.Count > 0 && enabled_items().Count(i => starting(state_of(i))) < (Core.Instance.opt_max_restarts > 0 ? Core.Instance.opt_max_restarts : auto_restart_slots))
             {
                 KeyValuePair<ListViewItem, string> next = restart_queue[0];
                 restart_queue.RemoveAt(0);
                 ListViewItem item = next.Key;
                 ServerState st = state_of(item);
                 st.Queued = false;
-                if (item.ListView == null || is_paused(item)) { continue; }
+                if (!alive(item) || is_paused(item)) { continue; }
                 if (st.Proc != PROC_LOST && st.Net != NET_TIMEOUT)
                 {
                     log(Lang.F("log.queue_recovered", item.Text));
@@ -1683,7 +2066,7 @@ namespace hlsmx
             status.Updated = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
             List<ColumnHeader> columns = serverList.Columns.Cast<ColumnHeader>().Where(c => column_visible[c.Index]).OrderBy(c => c.DisplayIndex).ToList();
             status.Columns = columns.Select(c => c.Text).ToArray();
-            status.Rows = serverList.Items.Cast<ListViewItem>().Select(i => columns.Select(c => i.SubItems[c.Index].Text).ToArray()).ToList();
+            status.Rows = enabled_items().Select(i => columns.Select(c => i.SubItems[c.Index].Text).ToArray()).ToList();
             try { Json.Save(Core.status_path, status); }
             catch { }
         }

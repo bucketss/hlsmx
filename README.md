@@ -2,7 +2,7 @@
 
 ![HLSMX](readme.png)
 
-Server Monitor for most Valve games.
+Server monitor for most Valve games, supporting GoldSrc up through CS2.
 
 Based on *CF Server Monitor* by ChunFeng (2024), and *Half-Life Server Monitor* by Rulzy (2011).
 
@@ -12,11 +12,12 @@ Windows only.
 
 - Drop-in replacement for HLSM/CFMonitor.
 - Automatically imports HLSM and CFSM configurations.
-- Monitors most Valve server executables.
+- Monitors most (all?) Valve server executables.
 - Templates for common games.
 - Scheduled restarts/starts/stops.
 - Webhook notifications (Discord, etc.).
 - Can run as a Windows service.
+- Tabs!
 
 
 ## Usage

@@ -52,6 +52,13 @@ namespace hlsmx
             apply_children(form, dark);
         }
 
+        public static void ApplyTo(Control c)
+        {
+            bool dark = Dark;
+            apply_control(c, dark);
+            apply_children(c, dark);
+        }
+
         private static void apply_title_bar(Form form, bool dark)
         {
             int value = dark ? 1 : 0;
@@ -239,6 +246,11 @@ namespace hlsmx
 
     class ThemedTabControl : TabControl
     {
+        public ThemedTabControl()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+
         private bool dark;
         public bool Dark
         {
@@ -247,10 +259,63 @@ namespace hlsmx
             {
                 if (dark == value) { return; }
                 dark = value;
-                SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, dark);
-                if (IsHandleCreated) { RecreateHandle(); }
                 Invalidate();
             }
+        }
+
+        public Func<TabPage, Color> TabColor;
+        public Color BarColor;
+        public event EventHandler Reordered;
+        public bool Moving { get; private set; }
+        private TabPage drag_page;
+        private Point drag_origin;
+        private bool dragging;
+
+        public int TabAt(Point p)
+        {
+            for (int i = 0; i < TabCount; i++) { if (GetTabRect(i).Contains(p)) { return i; } }
+            return -1;
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            int index = TabAt(e.Location);
+            drag_page = e.Button == MouseButtons.Left && index >= 0 ? TabPages[index] : null;
+            drag_origin = e.Location;
+            dragging = false;
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            if (drag_page == null || e.Button != MouseButtons.Left) { return; }
+            if (!dragging && Math.Abs(e.X - drag_origin.X) < SystemInformation.DragSize.Width) { return; }
+            dragging = true;
+            int target = TabAt(e.Location);
+            int from = TabPages.IndexOf(drag_page);
+            if (target < 0 || from < 0 || target == from) { return; }
+            Rectangle over = GetTabRect(target);
+            int width = GetTabRect(from).Width;
+            if (target > from ? e.X < over.Right - width : e.X > over.Left + width) { return; }
+            Moving = true;
+            try
+            {
+                SuspendLayout();
+                TabPages.Remove(drag_page);
+                TabPages.Insert(target, drag_page);
+                SelectedTab = drag_page;
+                ResumeLayout();
+            }
+            finally { Moving = false; }
+            if (Reordered != null) { Reordered(this, EventArgs.Empty); }
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            drag_page = null;
+            dragging = false;
         }
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -262,7 +327,6 @@ namespace hlsmx
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            if (!dark) { return; }
             if (hfont != IntPtr.Zero) { DeleteObject(hfont); }
             hfont = Font.ToHfont();
             SendMessage(Handle, 0x0030, hfont, (IntPtr)1);
@@ -276,19 +340,26 @@ namespace hlsmx
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            if (!dark) { base.OnPaint(e); return; }
             Graphics g = e.Graphics;
-            using (SolidBrush back = new SolidBrush(Theme.Back)) { g.FillRectangle(back, ClientRectangle); }
+            Color back = dark ? Theme.Back : SystemColors.Control;
+            Color surface = dark ? Theme.Surface : SystemColors.Window;
+            Color edge = dark ? Theme.Border : SystemColors.ControlDark;
+            Color fore = dark ? Theme.Fore : SystemColors.ControlText;
+            using (SolidBrush b = new SolidBrush(back)) { g.FillRectangle(b, ClientRectangle); }
             Rectangle display = DisplayRectangle;
             display.Inflate(1, 1);
-            using (Pen border = new Pen(Theme.Border)) { g.DrawRectangle(border, display); }
+            using (Pen border = new Pen(edge)) { g.DrawRectangle(border, display); }
             for (int i = 0; i < TabCount; i++)
             {
                 Rectangle tab = GetTabRect(i);
                 bool selected = i == SelectedIndex;
-                using (SolidBrush b = new SolidBrush(selected ? Theme.Surface : Theme.Back)) { g.FillRectangle(b, tab); }
-                using (Pen border = new Pen(Theme.Border)) { g.DrawRectangle(border, tab); }
-                TextRenderer.DrawText(g, TabPages[i].Text, Font, tab, Theme.Fore, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                Color custom = TabColor != null ? TabColor(TabPages[i]) : Color.Empty;
+                Color fill = !custom.IsEmpty ? custom : (selected ? surface : back);
+                Color text = custom.IsEmpty ? fore : (custom.R * 299 + custom.G * 587 + custom.B * 114 < 128000 ? Color.White : Color.Black);
+                using (SolidBrush b = new SolidBrush(fill)) { g.FillRectangle(b, tab); }
+                using (Pen border = new Pen(edge)) { g.DrawRectangle(border, tab); }
+                if (selected) { using (SolidBrush b = new SolidBrush(BarColor.IsEmpty ? Theme.Highlight : BarColor)) { g.FillRectangle(b, tab.X + 1, tab.Y + 1, tab.Width - 1, 2); } }
+                TextRenderer.DrawText(g, TabPages[i].Text, Font, tab, text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
             }
         }
     }

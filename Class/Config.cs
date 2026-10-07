@@ -32,6 +32,10 @@ namespace hlsmx
             WarnRcon = false;
             SkipBusy = false;
             StartMinimized = false;
+            HideInactiveTab = false;
+            HideLogTab = false;
+            Tabs = new List<TabSetting>();
+            TabBarColor = "";
         }
 
         [DataMember(Order = 0)] public int CheckInterval;
@@ -47,7 +51,6 @@ namespace hlsmx
         [DataMember(Order = 11)] public int[] WindowBounds;
         [DataMember(Order = 12)] public bool WindowMaximized;
         [DataMember(Order = 13)] public List<ColumnSetting> Columns;
-        [DataMember(Order = 14)] public bool ListLocalIps;
         [DataMember(Order = 15)] public string Language;
         [DataMember(Order = 16)] public List<WebhookSetting> Webhooks;
         [DataMember(Order = 17)] public bool ExcludeBots;
@@ -56,6 +59,27 @@ namespace hlsmx
         [DataMember(Order = 22)] public bool WarnRcon;
         [DataMember(Order = 23)] public bool SkipBusy;
         [DataMember(Order = 24)] public bool StartMinimized;
+        [DataMember(Order = 25)] public bool HideInactiveTab;
+        [DataMember(Order = 26)] public bool HideLogTab;
+        [DataMember(Order = 27)] public List<TabSetting> Tabs;
+        [DataMember(Order = 28)] public string TabBarColor;
+    }
+
+    [DataContract]
+    public class TabSetting
+    {
+        public TabSetting() { defaults(); }
+        [OnDeserializing] private void on_deserializing(StreamingContext context) { defaults(); }
+        private void defaults()
+        {
+            Id = "";
+            Name = "";
+            Color = "";
+        }
+
+        [DataMember(Order = 0)] public string Id;
+        [DataMember(Order = 1)] public string Name;
+        [DataMember(Order = 2)] public string Color;
     }
 
     [DataContract]
@@ -144,6 +168,8 @@ namespace hlsmx
             Pid = 0;
             StartTicks = 0;
             Window = 0;
+            Disabled = false;
+            Tab = "";
         }
 
         [DataMember(Order = 0)] public string Name;
@@ -163,6 +189,8 @@ namespace hlsmx
         [DataMember(Order = 14)] public int Pid;
         [DataMember(Order = 15)] public long StartTicks;
         [DataMember(Order = 16)] public long Window;
+        [DataMember(Order = 17)] public bool Disabled;
+        [DataMember(Order = 18)] public string Tab;
     }
 
     [DataContract]

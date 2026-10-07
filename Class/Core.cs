@@ -257,7 +257,9 @@ namespace hlsmx
         public int opt_max_restarts { get { return settings.MaxSimultaneousRestarts; } set { settings.MaxSimultaneousRestarts = value; } }
         public bool opt_tray { get { return settings.CloseToTray; } set { settings.CloseToTray = value; } }
         public string opt_language { get { return settings.Language; } set { settings.Language = value ?? ""; } }
-        public bool opt_list_local_ips { get { return settings.ListLocalIps; } set { settings.ListLocalIps = value; } }
+        public bool opt_hide_inactive { get { return settings.HideInactiveTab; } set { settings.HideInactiveTab = value; } }
+        public bool opt_hide_log { get { return settings.HideLogTab; } set { settings.HideLogTab = value; } }
+        public string opt_tab_bar_color { get { return settings.TabBarColor ?? ""; } set { settings.TabBarColor = value ?? ""; } }
         public bool opt_start_minimized { get { return settings.StartMinimized; } set { settings.StartMinimized = value; } }
         public int opt_loop_count { get { return settings.CrashLoopRestarts; } set { settings.CrashLoopRestarts = value; } }
         public string opt_icon { get { return settings.Icon; } set { settings.Icon = value ?? ""; } }

@@ -42,11 +42,13 @@ private void InitializeComponent()
             this.colUptime = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.colLastRestart = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.headerMenu = new System.Windows.Forms.ContextMenuStrip(this.components);
+            this.tabDisabled = new System.Windows.Forms.TabPage();
             this.tabLog = new System.Windows.Forms.TabPage();
             this.logBox = new System.Windows.Forms.TextBox();
             this.serverMenu = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.menuPauseMonitoring = new System.Windows.Forms.ToolStripMenuItem();
             this.menuResetRestartCount = new System.Windows.Forms.ToolStripMenuItem();
+            this.menuDisableServer = new System.Windows.Forms.ToolStripMenuItem();
             this.menuSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.menuEditServer = new System.Windows.Forms.ToolStripMenuItem();
             this.menuSchedules = new System.Windows.Forms.ToolStripMenuItem();
@@ -83,8 +85,8 @@ private void InitializeComponent()
             this.mainMenu.TabIndex = 0;
             this.mainMenu.Text = "mainMenu";
             this.menuSettings.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.menuOptions,
             this.menuOpenLogs,
+            this.menuOptions,
             this.menuSeparator4,
             this.menuExit});
             this.menuSettings.Name = "menuSettings";
@@ -92,12 +94,11 @@ private void InitializeComponent()
             this.menuSettings.Text = "HLS&MX";
             this.menuOptions.Name = "menuOptions";
             this.menuOptions.Size = new System.Drawing.Size(200, 22);
-            this.menuOptions.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.O)));
-            this.menuOptions.Text = "&Options...";
+            this.menuOptions.Text = "&Options";
             this.menuOptions.Click += new System.EventHandler(this.menuOptions_Click);
             this.menuOpenLogs.Name = "menuOpenLogs";
             this.menuOpenLogs.Size = new System.Drawing.Size(200, 22);
-            this.menuOpenLogs.Text = "Open &Logs Folder";
+            this.menuOpenLogs.Text = "Open &logs";
             this.menuOpenLogs.Click += new System.EventHandler(this.menuOpenLogs_Click);
             this.menuSeparator4.Name = "menuSeparator4";
             this.menuSeparator4.Size = new System.Drawing.Size(197, 6);
@@ -115,6 +116,7 @@ private void InitializeComponent()
             this.menuAbout.Text = "&About...";
             this.menuAbout.Click += new System.EventHandler(this.menuAbout_Click);
             this.tabs.Controls.Add(this.tabServers);
+            this.tabs.Controls.Add(this.tabDisabled);
             this.tabs.Controls.Add(this.tabLog);
             this.tabs.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tabs.Location = new System.Drawing.Point(0, 25);
@@ -122,6 +124,7 @@ private void InitializeComponent()
             this.tabs.SelectedIndex = 0;
             this.tabs.Size = new System.Drawing.Size(1008, 296);
             this.tabs.TabIndex = 1;
+            this.tabs.SelectedIndexChanged += new System.EventHandler(this.tabs_SelectedIndexChanged);
             this.tabServers.Controls.Add(this.serverList);
             this.tabServers.Location = new System.Drawing.Point(4, 22);
             this.tabServers.Name = "tabServers";
@@ -202,12 +205,19 @@ private void InitializeComponent()
             this.headerMenu.Name = "headerMenu";
             this.headerMenu.Size = new System.Drawing.Size(61, 4);
             this.headerMenu.Opening += new System.ComponentModel.CancelEventHandler(this.headerMenu_Opening);
+            this.tabDisabled.Location = new System.Drawing.Point(4, 22);
+            this.tabDisabled.Name = "tabDisabled";
+            this.tabDisabled.Padding = new System.Windows.Forms.Padding(3);
+            this.tabDisabled.Size = new System.Drawing.Size(1000, 270);
+            this.tabDisabled.TabIndex = 1;
+            this.tabDisabled.Text = "Inactive";
+            this.tabDisabled.UseVisualStyleBackColor = true;
             this.tabLog.Controls.Add(this.logBox);
             this.tabLog.Location = new System.Drawing.Point(4, 22);
             this.tabLog.Name = "tabLog";
             this.tabLog.Padding = new System.Windows.Forms.Padding(3);
             this.tabLog.Size = new System.Drawing.Size(1000, 270);
-            this.tabLog.TabIndex = 1;
+            this.tabLog.TabIndex = 2;
             this.tabLog.Text = "Log";
             this.tabLog.UseVisualStyleBackColor = true;
             this.logBox.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -221,6 +231,7 @@ private void InitializeComponent()
             this.serverMenu.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.menuPauseMonitoring,
             this.menuResetRestartCount,
+            this.menuDisableServer,
             this.menuSeparator1,
             this.menuEditServer,
             this.menuSchedules,
@@ -247,26 +258,29 @@ private void InitializeComponent()
             this.menuResetRestartCount.Size = new System.Drawing.Size(219, 22);
             this.menuResetRestartCount.Text = "&Zero Restart Count";
             this.menuResetRestartCount.Click += new System.EventHandler(this.menuResetRestartCount_Click);
+            this.menuDisableServer.Name = "menuDisableServer";
+            this.menuDisableServer.Size = new System.Drawing.Size(219, 22);
+            this.menuDisableServer.Text = "Deac&tivate";
+            this.menuDisableServer.Click += new System.EventHandler(this.menuDisableServer_Click);
             this.menuSeparator1.Name = "menuSeparator1";
             this.menuSeparator1.Size = new System.Drawing.Size(216, 6);
             this.menuEditServer.Name = "menuEditServer";
             this.menuEditServer.ShortcutKeyDisplayString = "Enter";
             this.menuEditServer.Size = new System.Drawing.Size(219, 22);
-            this.menuEditServer.Text = "&Edit Server...";
+            this.menuEditServer.Text = "&Edit Server";
             this.menuEditServer.Click += new System.EventHandler(this.menuEditServer_Click);
             this.menuSchedules.Name = "menuSchedules";
             this.menuSchedules.Size = new System.Drawing.Size(219, 22);
-            this.menuSchedules.Text = "Sche&dules...";
+            this.menuSchedules.Text = "Sche&dules";
             this.menuSchedules.Click += new System.EventHandler(this.menuSchedules_Click);
             this.menuNewServer.Name = "menuNewServer";
-            this.menuNewServer.ShortcutKeyDisplayString = "Ctrl+N";
             this.menuNewServer.Size = new System.Drawing.Size(219, 22);
-            this.menuNewServer.Text = "&New Server...";
+            this.menuNewServer.Text = "&New Server";
             this.menuNewServer.Click += new System.EventHandler(this.menuNewServer_Click);
             this.menuDuplicateServer.Name = "menuDuplicateServer";
             this.menuDuplicateServer.ShortcutKeyDisplayString = "Ctrl+D";
             this.menuDuplicateServer.Size = new System.Drawing.Size(219, 22);
-            this.menuDuplicateServer.Text = "D&uplicate Server...";
+            this.menuDuplicateServer.Text = "D&uplicate Server";
             this.menuDuplicateServer.Click += new System.EventHandler(this.menuDuplicateServer_Click);
             this.menuDeleteServer.Name = "menuDeleteServer";
             this.menuDeleteServer.ShortcutKeyDisplayString = "Del";
@@ -358,6 +372,7 @@ private System.Windows.Forms.MenuStrip mainMenu;
         private System.Windows.Forms.ToolStripMenuItem menuAbout;
         private hlsmx.ThemedTabControl tabs;
         private System.Windows.Forms.TabPage tabServers;
+        private System.Windows.Forms.TabPage tabDisabled;
         private System.Windows.Forms.TabPage tabLog;
         private System.Windows.Forms.TextBox logBox;
         private System.Windows.Forms.ListView serverList;
@@ -381,6 +396,7 @@ private System.Windows.Forms.MenuStrip mainMenu;
         private System.Windows.Forms.ContextMenuStrip serverMenu;
         private System.Windows.Forms.ToolStripMenuItem menuPauseMonitoring;
         private System.Windows.Forms.ToolStripMenuItem menuResetRestartCount;
+        private System.Windows.Forms.ToolStripMenuItem menuDisableServer;
         private System.Windows.Forms.ToolStripSeparator menuSeparator1;
         private System.Windows.Forms.ToolStripMenuItem menuEditServer;
         private System.Windows.Forms.ToolStripMenuItem menuSchedules;
