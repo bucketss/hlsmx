@@ -10,6 +10,7 @@ namespace hlsmx
         private readonly TextBox url = new TextBox();
         private readonly Label detected = new Label();
         private readonly ComboBox type = new ComboBox();
+        private readonly Button test = new Button();
         private readonly CheckBox[] events = { new CheckBox(), new CheckBox(), new CheckBox(), new CheckBox() };
         private static readonly string[] event_keys = { "opt.notify_start", "opt.notify_restart", "opt.notify_crash_loop", "opt.notify_schedule" };
 
@@ -31,7 +32,7 @@ namespace hlsmx
             Label url_label = new Label { Text = Lang.T("hook.url"), AutoSize = true };
             Label type_label = new Label { Text = Lang.T("hook.type"), AutoSize = true };
             Label send_label = new Label { Text = Lang.T("hook.send"), AutoSize = true };
-            Button test = new Button { Text = Lang.T("opt.test") };
+            test.Text = Lang.T("opt.test");
             Button ok = new Button { Text = Lang.T("dlg.ok") };
             Button cancel = new Button { Text = Lang.T("dlg.cancel"), DialogResult = DialogResult.Cancel };
             Controls.AddRange(new Control[] { name_label, name, url_label, url, detected, type_label, type, send_label, test, ok, cancel });
@@ -105,13 +106,29 @@ namespace hlsmx
         private void send_test()
         {
             if (!url_valid()) { return; }
-            Cursor = Cursors.WaitCursor;
-            string resolved;
-            string error = Core.Instance.post_webhook(url.Text.Trim(), selected_type, Lang.T("webhook.test_message"), out resolved);
-            Cursor = Cursors.Default;
-            if (resolved != null) { url.Text = resolved; }
-            if (error == null) { MessageBox.Show(this, Lang.T("webhook.sent"), Lang.T("webhook.title"), MessageBoxButtons.OK, MessageBoxIcon.Information); }
-            else { MessageBox.Show(this, Lang.F("webhook.failed", error), Lang.T("webhook.title"), MessageBoxButtons.OK, MessageBoxIcon.Error); }
+            string sent = url.Text.Trim();
+            string type = selected_type;
+            string message = Lang.T("webhook.test_message");
+            test.Enabled = false;
+            Cursor = Cursors.AppStarting;
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                string resolved;
+                string error = Core.Instance.post_webhook(sent, type, message, out resolved);
+                try
+                {
+                    BeginInvoke((MethodInvoker)delegate
+                    {
+                        if (IsDisposed) { return; }
+                        Cursor = Cursors.Default;
+                        test.Enabled = true;
+                        if (resolved != null && url.Text.Trim() == sent) { url.Text = resolved; }
+                        if (error == null) { MessageBox.Show(this, Lang.T("webhook.sent"), Lang.T("webhook.title"), MessageBoxButtons.OK, MessageBoxIcon.Information); }
+                        else { MessageBox.Show(this, Lang.F("webhook.failed", error), Lang.T("webhook.title"), MessageBoxButtons.OK, MessageBoxIcon.Error); }
+                    });
+                }
+                catch (InvalidOperationException) { }
+            });
         }
 
         private void accept()

@@ -137,6 +137,8 @@ namespace hlsmx
             menuAddTab.Click += (s, e) => add_tab();
             menuSettings.DropDownItems.Insert(1, menuAddTab);
             serverMenu.Items.Insert(serverMenu.Items.IndexOf(menuDisableServer) + 1, menuMoveToTab);
+            menuNewTab.Click += (s, e) => add_tab();
+            serverMenu.Items.Insert(serverMenu.Items.IndexOf(menuNewServer) + 1, menuNewTab);
             setup_row_drag();
             Core.Instance.log_sink = log;
             string error = Core.Instance.ReadConfig();
@@ -399,6 +401,7 @@ namespace hlsmx
             menuEditServer.Text = Lang.T("ctx.edit");
             menuSchedules.Text = Lang.T("ctx.schedules");
             menuNewServer.Text = Lang.T("ctx.new");
+            menuNewTab.Text = Lang.T("ctx.new_tab");
             menuDuplicateServer.Text = Lang.T("ctx.duplicate");
             menuDeleteServer.Text = Lang.T("ctx.delete");
             menuMoveUp.Text = Lang.T("ctx.move_up");
@@ -1203,6 +1206,7 @@ namespace hlsmx
             ServerState first = any ? state_of(serverList.Items[rows[0]]) : null;
             foreach (ToolStripItem entry in serverMenu.Items) { entry.Enabled = any; }
             menuNewServer.Enabled = true;
+            menuNewTab.Enabled = true;
             set_pause_menu(any && first.Proc == PROC_PAUSED);
             menuDisableServer.Text = Lang.T(current_tab == TAB_INACTIVE ? "ctx.reactivate" : "ctx.deactivate");
             menuMoveToTab.DropDownItems.Clear();
@@ -1217,7 +1221,6 @@ namespace hlsmx
             if (any)
             {
                 menuDisableServer.Enabled = current_tab == TAB_INACTIVE || rows.All(r => can_disable(serverList.Items[r]));
-                menuResetRestartCount.Enabled = first.Proc != PROC_PAUSED;
                 menuEditServer.Enabled = single;
                 menuSchedules.Enabled = single;
                 menuDuplicateServer.Enabled = single;
@@ -1515,6 +1518,7 @@ namespace hlsmx
 
         private readonly ToolStripMenuItem menuAddServer = new ToolStripMenuItem();
         private readonly ToolStripMenuItem menuAddTab = new ToolStripMenuItem();
+        private readonly ToolStripMenuItem menuNewTab = new ToolStripMenuItem();
 
         private void menuNewServer_Click(object sender, EventArgs e)
         {
@@ -1648,6 +1652,7 @@ namespace hlsmx
             {
                 Core.Instance.shutdown_process(snap.Pid, snap.StartTicks, snap.Exe, snap.IP, snap.Port, snap.Password, shutdown_timeout);
                 NetQuery.Instance.forget(snap.IP, snap.Port);
+                Rcon.forget(snap.IP, snap.Port);
                 Core.StartResult started = Core.Instance.start_process(snap.Exe, snap.Params, snap.Priority, snap.Cores, snap.Show, snap.Name);
                 if (started.Pid < 1) { log(Lang.F("log.start_failed", snap.Name, snap.Exe)); }
                 try
@@ -1746,7 +1751,7 @@ namespace hlsmx
             if (st.Queue.Count == 0) { return; }
             DateTime now = DateTime.Now;
             while (st.Queue.Count > 1 && st.Queue[0].Waiting && st.Queue[1].Due <= now) { st.Queue.RemoveAt(0); }
-            foreach (PendingAction q in st.Queue.ToList()) { if (q.Warn && now < q.Due) { count_down(item, q, (int)Math.Ceiling((q.Due - now).TotalSeconds)); } }
+            foreach (PendingAction q in st.Queue.ToList()) { if (q.Warn && now < q.Due && st.Pid > 0) { count_down(item, q, (int)Math.Ceiling((q.Due - now).TotalSeconds)); } }
             PendingAction p = st.Queue[0];
             if (p.Action == ACTION_STOP && is_paused(item) && st.Pid == 0 && !p.Started) { st.Queue.Remove(p); return; }
             if (now < p.Due) { return; }
@@ -1774,6 +1779,7 @@ namespace hlsmx
             log_event(Core.NOTIFY_SCHEDULE, Lang.F("log.scheduled_" + action, item.Text));
             if (p.Action == ACTION_START) { start_item(item); save_servers(); }
             else if (p.Action == ACTION_STOP) { stop_item(item); save_servers(); }
+            else if (is_paused(item) && st.Pid == 0) { start_item(item); save_servers(); }
             else if (port_free_or_pause(item)) { restart_item(item, Core.Instance.opt_shutdown); }
             show(item);
         }

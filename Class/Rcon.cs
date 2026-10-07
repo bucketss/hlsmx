@@ -45,6 +45,13 @@ namespace hlsmx
             return true;
         }
 
+        public static void forget(string ip, int port)
+        {
+            IPAddress address;
+            if (!IPAddress.TryParse(ip ?? "", out address)) { return; }
+            lock (goldsrc_servers) { goldsrc_servers.Remove(new IPEndPoint(address, port).ToString()); }
+        }
+
         public static bool send(string ip, int port, string password, string command)
         {
             if (string.IsNullOrEmpty(password) || port < 1) { return false; }

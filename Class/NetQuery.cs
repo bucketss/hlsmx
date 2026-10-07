@@ -323,20 +323,22 @@ namespace hlsmx
             byte[] buffer = new byte[4096];
             int length = socks.Receive(buffer);
             if (length >= 4 && is_oob(buffer)) { return slice(buffer, 0, length); }
-            if (length < 12 || !is_split(buffer)) { return null; }
+            if (length < 10 || !is_split(buffer)) { return null; }
             int id = BitConverter.ToInt32(buffer, 4);
-            int total = buffer[8];
-            if (id < 0 || total < 1) { return null; }
+            bool goldsrc = (buffer[8] >> 4) > 0 || buffer[9] >= buffer[8];
+            int header = goldsrc ? 9 : 12;
+            int total = goldsrc ? buffer[8] & 0x0F : buffer[8];
+            if (id < 0 || total < 1 || length < header) { return null; }
             byte[][] parts = new byte[total][];
             int received = 0;
             while (true)
             {
-                if (length >= 12 && is_split(buffer) && BitConverter.ToInt32(buffer, 4) == id && buffer[8] == total)
+                if (length >= header && is_split(buffer) && BitConverter.ToInt32(buffer, 4) == id && (goldsrc ? buffer[8] & 0x0F : buffer[8]) == total)
                 {
-                    int number = buffer[9];
+                    int number = goldsrc ? buffer[8] >> 4 : buffer[9];
                     if (number < total && parts[number] == null)
                     {
-                        parts[number] = slice(buffer, 12, length - 12);
+                        parts[number] = slice(buffer, header, length - header);
                         received++;
                     }
                 }

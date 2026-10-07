@@ -105,7 +105,9 @@ namespace hlsmx
             list.BeginUpdate();
             if (!status.Columns.SequenceEqual(shown_columns))
             {
+                list.Items.Clear();
                 list.Columns.Clear();
+                list.Tag = null;
                 foreach (string column in status.Columns) { list.Columns.Add(column, 100); }
                 shown_columns = status.Columns;
             }

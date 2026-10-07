@@ -69,24 +69,43 @@ namespace hlsmx
                 }
                 Application.SetCompatibleTextRenderingDefault(false);
                 Application.EnableVisualStyles();
-                if (ServiceHelper.Running)
+                Mutex global = null;
+                bool global_created;
+                try { global = new Mutex(true, @"Global\hlsmx_single_instance", out global_created); }
+                catch (UnauthorizedAccessException) { global_created = false; }
+                using (global)
                 {
-                    Lang.load(Lang.resolve(Core.Instance.peek_language()));
-                    if (tray) { return; }
-                    using (StatusForm status = new StatusForm())
+                    if (!global_created)
                     {
-                        Application.Run(status);
-                        if (!status.Manage) { return; }
-                    }
-                    ServiceHelper.Stop();
-                    if (ServiceHelper.Running)
-                    {
-                        MessageBox.Show(Lang.T("svc.stop_failed"), "HLSMX", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        if (tray) { return; }
+                        Lang.load(Lang.resolve(Core.Instance.peek_language()));
+                        MessageBox.Show(Lang.T("msg.running_elsewhere"), "HLSMX", MessageBoxButtons.OK, MessageBoxIcon.Information);
                         return;
                     }
+                    run(tray);
                 }
-                Application.Run(new MainForm(tray, false));
             }
+        }
+
+        static void run(bool tray)
+        {
+            if (ServiceHelper.Running)
+            {
+                Lang.load(Lang.resolve(Core.Instance.peek_language()));
+                if (tray) { return; }
+                using (StatusForm status = new StatusForm())
+                {
+                    Application.Run(status);
+                    if (!status.Manage) { return; }
+                }
+                ServiceHelper.Stop();
+                if (ServiceHelper.Running)
+                {
+                    MessageBox.Show(Lang.T("svc.stop_failed"), "HLSMX", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+            }
+            Application.Run(new MainForm(tray, false));
         }
     }
 }

@@ -420,19 +420,35 @@ namespace hlsmx
         {
             int index = selected_hook;
             if (index < 0) { return; }
-            string url = hooks[index].Url;
-            string type = hooks[index].Type;
-            string resolved;
-            Cursor = Cursors.WaitCursor;
-            string error = Core.Instance.post_webhook(url, type, Lang.T("webhook.test_message"), out resolved);
-            Cursor = Cursors.Default;
-            if (resolved != null && resolved != url)
+            WebhookSetting hook = hooks[index];
+            string url = hook.Url;
+            string type = hook.Type;
+            string message = Lang.T("webhook.test_message");
+            buttonTest.Enabled = false;
+            Cursor = Cursors.AppStarting;
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
             {
-                hooks[index].Url = resolved;
-                refresh_hooks(index);
-            }
-            if (error == null) { MessageBox.Show(this, Lang.T("webhook.sent"), Lang.T("webhook.title"), MessageBoxButtons.OK, MessageBoxIcon.Information); }
-            else { MessageBox.Show(this, Lang.F("webhook.failed", error), Lang.T("webhook.title"), MessageBoxButtons.OK, MessageBoxIcon.Error); }
+                string resolved;
+                string error = Core.Instance.post_webhook(url, type, message, out resolved);
+                try
+                {
+                    BeginInvoke((MethodInvoker)delegate
+                    {
+                        if (IsDisposed) { return; }
+                        Cursor = Cursors.Default;
+                        int at = hooks.IndexOf(hook);
+                        if (resolved != null && resolved != url && at >= 0 && hook.Url == url)
+                        {
+                            hook.Url = resolved;
+                            refresh_hooks(at);
+                        }
+                        else { refresh_hook_buttons(); }
+                        if (error == null) { MessageBox.Show(this, Lang.T("webhook.sent"), Lang.T("webhook.title"), MessageBoxButtons.OK, MessageBoxIcon.Information); }
+                        else { MessageBox.Show(this, Lang.F("webhook.failed", error), Lang.T("webhook.title"), MessageBoxButtons.OK, MessageBoxIcon.Error); }
+                    });
+                }
+                catch (InvalidOperationException) { }
+            });
         }
 
         private void buttonService_Click(object sender, EventArgs e)

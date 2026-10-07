@@ -175,11 +175,13 @@ namespace hlsmx
         private void buttonOk_Click(object sender, EventArgs e)
         {
             string problem = null;
-            if (new[] { textName, textExe, textParams }.Any(t => string.IsNullOrWhiteSpace(t.Text)) || listCores.CheckedIndices.Count == 0) { problem = "edit.empty"; }
+            if (new[] { textName, textExe, textParams }.Any(t => string.IsNullOrWhiteSpace(t.Text))) { problem = "edit.empty"; }
             else if (!has_port(LaunchParams)) { problem = "edit.no_port"; }
+            else if (listCores.CheckedIndices.Count == 0) { problem = "edit.no_cores"; }
             if (problem != null)
             {
                 MessageBox.Show(this, Lang.T(problem), Lang.T("dlg.error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+                if (problem == "edit.no_cores" && !affinity_open) { buttonAffinity_Click(null, null); }
                 return;
             }
             if (is_cs2(ExePath))

@@ -235,11 +235,6 @@ namespace hlsmx
             c.Enabled = Enabled; c.Day = Day; c.Time = Time; c.Action = Action;
             return c;
         }
-
-        public override string ToString()
-        {
-            return string.Format("{0}{1} {2}: {3}", Enabled ? "" : "(off) ", Day, Time, Action);
-        }
     }
 
     [DataContract]
