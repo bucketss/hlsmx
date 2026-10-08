@@ -17,6 +17,7 @@ Windows only.
 - Scheduled restarts/starts/stops.
 - Webhook notifications (Discord, etc.).
 - Can run as a Windows service.
+- Multilingual.
 - Tabs!
 
 
